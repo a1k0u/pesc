@@ -5,6 +5,7 @@ pesc.client
 """
 
 import json
+import jwt
 import requests
 
 from datetime import datetime
@@ -156,9 +157,6 @@ class PescAccount(PescObject):
             for meter in response.json()
         ]
 
-    # get_address
-    # https://ikus.pesc.ru/api/v8/accounts/.../address
-
     @property
     def meters(self):
         return self.get_meters()
@@ -173,13 +171,9 @@ class PescAccount(PescObject):
 
     @property
     def debt(self):
-        # https://ikus.pesc.ru/api/v8/accounts/../payments/bills/current ?
-
-        url = "/".join((self.api_url, self.provider, "debt"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"accountNumber": self.account_id, "serviceType": self.service_type}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
-        return response.json()
+        return self.session.get(
+            f"{self.api_url}/v8/accounts/{self.account_id}/payments/bills/current"
+        ).json()
 
     @property
     def active_payments(self):
@@ -191,13 +185,9 @@ class PescAccount(PescObject):
 
     @property
     def address(self):
-        # https://ikus.pesc.ru/api/v8/accounts/.../address ?
-
-        url = "/".join((self.api_url, self.provider, "address"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"accountNumber": self.account_id, "serviceType": self.service_type}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
-        return response.json()["address"]
+        return self.session.get(
+            f"{self.api_url}/v8/accounts/{self.account_id}/address"
+        ).json()
 
     def __repr__(self):
         return "Account {} at {}".format(self.account_id, self.address)
@@ -363,6 +353,17 @@ class PescClient(PescObject):
         dict
             {'logoutSuccess': True}
         """
-        url = self.api_url + "/logout"
-        response = self.session.get(url)
-        return response.json()
+
+        token_id = json.loads(
+            jwt.decode(
+                self.session.headers.get("Authorization").split(" ")[1],
+                options={"verify_signature": False},
+            )["sub"]
+        )["tokenId"]
+
+        return {
+            "logoutSuccess": self.session.delete(
+                f"{self.api_url}/v1/auth/session/{token_id}"
+            ).status_code
+            == 200
+        }
