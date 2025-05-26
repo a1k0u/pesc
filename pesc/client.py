@@ -162,26 +162,10 @@ class PescAccount(PescObject):
         return self.get_meters()
 
     @property
-    def status(self):
-        url = "/".join((self.api_url, self.provider, "status"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"accountNumber": self.account_id, "serviceType": self.service_type}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
-        return response.json()
-
-    @property
     def debt(self):
         return self.session.get(
             f"{self.api_url}/v8/accounts/{self.account_id}/payments/bills/current"
         ).json()
-
-    @property
-    def active_payments(self):
-        url = "/".join((self.api_url, self.provider, "activePayments"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"accountNumber": self.account_id, "serviceType": self.service_type}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
-        return response.json()
 
     @property
     def address(self):
@@ -336,13 +320,18 @@ class PescClient(PescObject):
 
     @property
     def notifications(self):
-        url = self.api_url + "/notifications"
-        response = self.session.get(url)
-        try:
-            notifications = response.json()
-        except json.decoder.JSONDecodeError:
-            notifications = response.text
-        return notifications
+        types = ["top", "bell", "onboarding", "modal"]
+
+        return {
+            type: self.session.get(
+                f"{self.api_url}/v6/notifications",
+                params={
+                    "type": type,
+                    "state": "unread",
+                },
+            ).json()
+            for type in types
+        }
 
     def logout(self):
         """
