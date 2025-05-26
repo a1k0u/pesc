@@ -258,13 +258,38 @@ class PescClient(PescObject):
         Returns
         _______
         dict
-            {'email': 'null@prg.re', 'emailConfirmed': True, 'phoneConfirmed': True,
-             'superUserMode': False, 'guideViewed': True, 'phoneExists': True,
-             'hasPersonalInfo': True} or
-            {'errors': [{'code': 5, 'message': 'Неавторизованный доступ'}]}
+        {
+            'userId': int,
+            'name': {
+                'first': str,
+                'last': str,
+                'patronymic': optional[str]
+            },
+            'fields': List[dict],
+            'phone': str,
+            'email': str,
+            'isConfirmed': bool,
+            'isOnBoardingViewed': bool
+        }
+        or
+        {
+            'errors': [
+                {'code': 401, 'message': 'Неавторизованный доступ'}
+            ]
+        }
         """
 
         response = self.session.get(self.api_url + "/v6/users/current")
+        if response.status_code != 200:
+            return {
+                "errors": [
+                    {
+                        "code": response.status_code,
+                        "message": response.json().get("message", "Unknown error"),
+                    }
+                ]
+            }
+
         return response.json()
 
     def get_accounts(self):
