@@ -77,7 +77,7 @@ class PescMeter(PescObject):
         return response.json()
 
     def __repr__(self):
-        return "Meter {} from account {}".format(self.meter_number, self.account_id)
+        return "Meter {} from account {}".format(self.meter_id, self.account_id)
 
 
 class PescAccount(PescObject):
