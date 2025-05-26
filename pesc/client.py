@@ -20,7 +20,7 @@ class PescObject:
 
     """
 
-    def __init__(self, session=requests.Session()):
+    def __init__(self, session):
         self.session = session
         self.session.headers.update(
             {
@@ -39,7 +39,7 @@ class PescMeter(PescObject):
         super().__init__(session=session)
         self.account_id = account_id
         self.provider_id = provider_id
-        self.api_url = ROOT_URL + "/api"
+        self.api_url = f"{ROOT_URL}/api"
         self.meter_id = meter_id
 
     @property
@@ -50,9 +50,15 @@ class PescMeter(PescObject):
 
     def get_indications(
         self,
-        date_from=datetime.now().strftime("01.01.%Y"),
-        date_to=datetime.now().strftime("%d.%m.%Y"),
+        date_from=None,
+        date_to=None,
     ):
+        if date_from is None:
+            date_from = datetime.now().strftime("01.01.%Y")
+        if date_to is None:
+            date_to = datetime.now().strftime("%d.%m.%Y")
+
+
         response = self.session.get(
             f"{self.api_url}/v7/reading/individuals",
             params={
@@ -77,7 +83,7 @@ class PescMeter(PescObject):
         return response.json()
 
     def __repr__(self):
-        return "Meter {} from account {}".format(self.meter_id, self.account_id)
+        return f"Meter {self.meter_id} from account {self.account_id}"
 
 
 class PescAccount(PescObject):
@@ -88,15 +94,20 @@ class PescAccount(PescObject):
 
     def __init__(self, session, account_id, provider_id):
         super().__init__(session=session)
-        self.api_url = ROOT_URL + "/api"
+        self.api_url = f"{ROOT_URL}/api"
         self.account_id = account_id
         self.provider_id = provider_id
 
     def get_bills(
         self,
-        date_from=datetime.now().strftime("01.01.%Y"),
-        date_to=datetime.now().strftime("%d.%m.%Y"),
+        date_from=None,
+        date_to=None,
     ):
+        if date_from is None:
+            date_from = datetime.now().strftime("01.01.%Y")
+        if date_to is None:
+            date_to = datetime.now().strftime("%d.%m.%Y")
+
         response = self.session.get(
             f"{self.api_url}/v7/bills/payments",
             params={
@@ -107,9 +118,10 @@ class PescAccount(PescObject):
             },
         )
 
+        bill_ids = response.json()
         return [
             self.session.get(f"{self.api_url}/v8/payments/bills/{bill_id}").json()
-            for bill_id in response.json()
+            for bill_id in bill_ids
         ]
 
     def download_bill(self, bill_id, filename):
@@ -124,9 +136,15 @@ class PescAccount(PescObject):
 
     def get_payments(
         self,
-        date_from=datetime.now().strftime("01.01.%Y"),
-        date_to=datetime.now().strftime("%d.%m.%Y"),
+        date_from=None,
+        date_to=None,
     ):
+        if date_from is None:
+            date_from = datetime.now().strftime("01.01.%Y")
+        if date_to is None:
+            date_to = datetime.now().strftime("%d.%m.%Y")
+
+
         response = self.session.get(
             f"{self.api_url}/v7/payments",
             params={
@@ -137,9 +155,10 @@ class PescAccount(PescObject):
             },
         )
 
+        payment_ids = response.json()
         return [
             self.session.get(f"{self.api_url}/v8/payments/{payment_id}").json()
-            for payment_id in response.json()
+            for payment_id in payment_ids
         ]
 
     def get_meters(self):
@@ -147,6 +166,7 @@ class PescAccount(PescObject):
             f"{self.api_url}/v6/accounts/{self.account_id}/meters/info"
         )
 
+        meters = response.json()
         return [
             PescMeter(
                 self.session,
@@ -154,7 +174,7 @@ class PescAccount(PescObject):
                 self.provider_id,
                 meter["id"]["registration"],
             )
-            for meter in response.json()
+            for meter in meters
         ]
 
     @property
@@ -174,7 +194,7 @@ class PescAccount(PescObject):
         ).json()
 
     def __repr__(self):
-        return "Account {} at {}".format(self.account_id, self.address)
+        return f"Account {self.account_id} at {self.address}"
 
 
 class PescClient(PescObject):
@@ -188,8 +208,8 @@ class PescClient(PescObject):
         PHONE = "PHONE"
 
     def __init__(self):
-        super().__init__()
-        self.api_url = ROOT_URL + "/api"
+        super().__init__(requests.Session())
+        self.api_url = f"{ROOT_URL}/api"
         self.login = None
         self.password = None
         self.type = None
