@@ -34,48 +34,45 @@ class PescMeter(PescObject):
 
     """
 
-    def __init__(
-        self, session, account_id, provider, service_type, meter_id, meter_number
-    ):
+    def __init__(self, session, account_id, provider_id, meter_id):
         super().__init__(session=session)
         self.account_id = account_id
-        self.provider = provider
-        self.service_type = service_type
-        self.api_url = ROOT_URL + "/application/accounts"
+        self.provider_id = provider_id
+        self.api_url = ROOT_URL + "/api"
         self.meter_id = meter_id
-        self.meter_number = meter_number
 
     @property
     def info(self):
-        url = "/".join((self.api_url, self.provider, "meters", str(self.meter_id)))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        response = self.session.get(url, headers=headers)
-        return response.json()
+        return self.session.get(
+            f"{self.api_url}/v6/accounts/{self.account_id}/meters/info"
+        ).json()
 
     def get_indications(
         self,
-        date_from=datetime.now().strftime("01-01-%Y"),
-        date_to=datetime.now().strftime("%d-%m-%Y"),
+        date_from=datetime.now().strftime("01.01.%Y"),
+        date_to=datetime.now().strftime("%d.%m.%Y"),
     ):
-        url = "/".join((self.api_url, self.provider, "indications"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"meterId": self.meter_id, "dateFrom": date_from, "dateTo": date_to}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
+        response = self.session.get(
+            f"{self.api_url}/v7/reading/individuals",
+            params={
+                "provider": self.provider_id,
+                "account": self.account_id,
+                "from": date_from,
+                "to": date_to,
+            },
+        )
+
         return response.json()
 
     def post_indication(self, day=0, night=0):
-        url = "/".join((self.api_url, self.provider, "indication/new"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {
-            "account": {"accountNumber": self.account_id},
-            "serviceType": self.service_type,
-            "meterId": self.meter_id,
-            "indication": [
-                {"scale": "DAY", "value": day},
-                {"scale": "NIGHT", "value": night},
+        response = self.session.post(
+            f"{self.api_url}/v8/accounts/{self.account_id}/meters/{self.meter_id}/reading",
+            json=[
+                {"scaleId": 2, "value": day},
+                {"scaleId": 3, "value": night},
             ],
-        }
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
+        )
+
         return response.json()
 
     def __repr__(self):
@@ -88,12 +85,11 @@ class PescAccount(PescObject):
 
     """
 
-    def __init__(self, session, account_id, provider_name, service_type):
+    def __init__(self, session, account_id, provider_id):
         super().__init__(session=session)
         self.api_url = ROOT_URL + "/api"
         self.account_id = account_id
-        self.provider = provider_name
-        self.service_type = service_type
+        self.provider_id = provider_id
 
     def get_bills(
         self,
@@ -101,9 +97,9 @@ class PescAccount(PescObject):
         date_to=datetime.now().strftime("%d.%m.%Y"),
     ):
         response = self.session.get(
-            self.api_url + "/v7/bills/payments",
+            f"{self.api_url}/v7/bills/payments",
             params={
-                "provider": self.provider,
+                "provider": self.provider_id,
                 "account": self.account_id,
                 "from": date_from,
                 "to": date_to,
@@ -111,14 +107,16 @@ class PescAccount(PescObject):
         )
 
         return [
-            self.session.get(self.api_url + "/v8/payments/bills/" + bill_id).json()
+            self.session.get(f"{self.api_url}/v8/payments/bills/{bill_id}").json()
             for bill_id in response.json()
         ]
-    
-    def download_bill(self, bill_id, filename):
-        uuid = self.session.get(self.api_url + f"{self.account_id}/payments/bills/{bill_id}/uuid").json()
 
-        response = self.session.get(self.api_url + f"/v1/file/{uuid}", stream=True)
+    def download_bill(self, bill_id, filename):
+        uuid = self.session.get(
+            f"{self.api_url}/v7/accounts/{self.account_id}/payments/bills/{bill_id}/uuid"
+        ).text
+
+        response = self.session.get(f"{self.api_url}/v1/file/{uuid}", stream=True)
         with open(filename, "wb") as file:
             for chunk in response.iter_content(chunk_size=8192):
                 file.write(chunk)
@@ -129,9 +127,9 @@ class PescAccount(PescObject):
         date_to=datetime.now().strftime("%d.%m.%Y"),
     ):
         response = self.session.get(
-            self.api_url + "/v7/payments",
+            f"{self.api_url}/v7/payments",
             params={
-                "provider": self.provider,
+                "provider": self.provider_id,
                 "account": self.account_id,
                 "from": date_from,
                 "to": date_to,
@@ -139,23 +137,21 @@ class PescAccount(PescObject):
         )
 
         return [
-            self.session.get(self.api_url + "/v8/payments/" + payment_id).json()
+            self.session.get(f"{self.api_url}/v8/payments/{payment_id}").json()
             for payment_id in response.json()
         ]
 
     def get_meters(self):
-        url = "/".join((self.api_url, self.provider, "meters"))
-        headers = {"content-type": "application/json; charset=utf-8"}
-        data = {"accountNumber": self.account_id, "serviceType": self.service_type}
-        response = self.session.post(url, data=json.dumps(data), headers=headers)
+        response = self.session.get(
+            f"{self.api_url}/v6/accounts/{self.account_id}/meters/info"
+        )
+
         return [
             PescMeter(
                 self.session,
                 self.account_id,
-                self.provider,
-                self.service_type,
-                meter["meterId"],
-                meter["meterNumber"],
+                self.provider_id,
+                meter["id"]["registration"],
             )
             for meter in response.json()
         ]
@@ -177,6 +173,8 @@ class PescAccount(PescObject):
 
     @property
     def debt(self):
+        # https://ikus.pesc.ru/api/v8/accounts/../payments/bills/current ?
+
         url = "/".join((self.api_url, self.provider, "debt"))
         headers = {"content-type": "application/json; charset=utf-8"}
         data = {"accountNumber": self.account_id, "serviceType": self.service_type}
@@ -193,6 +191,8 @@ class PescAccount(PescObject):
 
     @property
     def address(self):
+        # https://ikus.pesc.ru/api/v8/accounts/.../address ?
+
         url = "/".join((self.api_url, self.provider, "address"))
         headers = {"content-type": "application/json; charset=utf-8"}
         data = {"accountNumber": self.account_id, "serviceType": self.service_type}
@@ -213,7 +213,7 @@ class PescClient(PescObject):
         EMAIL = "EMAIL"
         PHONE = "PHONE"
 
-    def __init__(self, session_path=None):
+    def __init__(self):
         super().__init__()
         self.api_url = ROOT_URL + "/api"
         self.login = None
@@ -244,7 +244,7 @@ class PescClient(PescObject):
         self.type = type
 
         response = self.session.post(
-            self.api_url + "/v8/users/auth",
+            f"{self.api_url}/v8/users/auth",
             json={
                 "login": login,
                 "password": password,
@@ -299,7 +299,7 @@ class PescClient(PescObject):
             }
         """
 
-        response = self.session.get(self.api_url + "/v6/users/current")
+        response = self.session.get(f"{self.api_url}/v6/users/current")
         if response.status_code != 200:
             return {
                 "errors": [
@@ -320,7 +320,7 @@ class PescClient(PescObject):
         _______
         List[PescAccount]
         """
-        response = self.session.get(self.api_url + "/v8/accounts")
+        response = self.session.get(f"{self.api_url}/v8/accounts")
         if response.status_code != 200:
             return {
                 "errors": [
@@ -336,7 +336,6 @@ class PescClient(PescObject):
                 self.session,
                 account["id"],
                 account["service"]["providerId"],
-                account["service"]["id"],
             )
             for account in response.json()
         ]
